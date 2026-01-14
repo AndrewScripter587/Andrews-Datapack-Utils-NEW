@@ -16,7 +16,7 @@
     "environment": "*",
     "entrypoints": {
         "main": [
-            "com.example.examplemod.ExampleMod"
+            "com.andrewgaming.aputils.APUtilsFabric"
         ]
     },
     "mixins": [
@@ -25,11 +25,11 @@
     ],
     "depends": {
         "fabricloader": ">=${fabric_loader_version}",
-        "fabric-api": "*",
-        "minecraft": "~${minecraft_version}",
         "java": ">=${java_version}"
     },
     "suggests": {
+        "fabric-api": "*",
+        "minecraft": "~${minecraft_version}",
         "another-mod": "*"
     }
 }
