@@ -2,7 +2,10 @@ package com.andrewgaming.aputils;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
+import com.mojang.brigadier.arguments.FloatArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.tree.LiteralCommandNode;
@@ -11,6 +14,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.commands.arguments.coordinates.Vec3Argument;
+import net.minecraft.commands.arguments.selector.EntitySelector;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
@@ -40,19 +44,22 @@ import net.minecraft.world.entity.projectile.hurtingprojectile.AbstractHurtingPr
 import net.minecraft.world.entity.projectile.hurtingprojectile.DragonFireball;
 import net.minecraft.world.entity.projectile.hurtingprojectile.Fireball;
 import net.minecraft.world.entity.projectile.hurtingprojectile.SmallFireball;
+import net.minecraft.world.food.FoodData;
 import net.minecraft.world.phys.Vec3;
 import org.slf4j.Logger;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
+import static com.andrewgaming.aputils.platform.Services.PLATFORM;
 import static net.minecraft.commands.Commands.*;
 
 public class SetupCommands{
     public static LiteralCommandNode<CommandSourceStack> Init(CommandDispatcher<CommandSourceStack> dispatcher, CommandBuildContext buildContext, CommandSelection commandSelection) {return SetupCommands.Init(dispatcher);}
     public static LiteralCommandNode<CommandSourceStack> Init(CommandDispatcher<CommandSourceStack> dispatcher) {
         Logger LOGGER = AndrewsPackUtilities.LOGGER;
-        return dispatcher.register(literal("aputils")
+        LiteralArgumentBuilder<CommandSourceStack> main = literal("aputils")
                 .then(literal("calc")
                         .then(literal("add")
                                 .then(argument("value1", DoubleArgumentType.doubleArg())
@@ -148,25 +155,25 @@ public class SetupCommands{
                         )
                         .then(literal("distance")
                                 .requires(serverCommandSource -> Commands.hasPermission(LEVEL_GAMEMASTERS).test(serverCommandSource)))
-                                .then(argument("pos1", Vec3Argument.vec3(true))
-                                        .then(argument("pos2", Vec3Argument.vec3(true))
-                                                .executes(context -> calcDist(context, Vec3Argument.getVec3(context, "pos1"), Vec3Argument.getVec3(context, "pos2")))
-                                                .then(argument("scale",DoubleArgumentType.doubleArg())
-                                                        .executes(context -> calcDist(context, Vec3Argument.getVec3(context, "pos1"), Vec3Argument.getVec3(context,"pos2"),DoubleArgumentType.getDouble(context,"scale")))
-                                                )
+                        .then(argument("pos1", Vec3Argument.vec3(true))
+                                .then(argument("pos2", Vec3Argument.vec3(true))
+                                        .executes(context -> calcDist(context, Vec3Argument.getVec3(context, "pos1"), Vec3Argument.getVec3(context, "pos2")))
+                                        .then(argument("scale",DoubleArgumentType.doubleArg())
+                                                .executes(context -> calcDist(context, Vec3Argument.getVec3(context, "pos1"), Vec3Argument.getVec3(context,"pos2"),DoubleArgumentType.getDouble(context,"scale")))
                                         )
-                                ).then(literal("entities")
-                                        .then(argument("ent1", EntityArgument.entity())
-                                                .then(argument("ent2", EntityArgument.entity())
-                                                        .executes(context -> calcDist(context, EntityArgument.getEntity(context,"ent1"), EntityArgument.getEntity(context,"ent2")))
-                                                        .then(argument("scale",DoubleArgumentType.doubleArg())
-                                                                .executes(context -> calcDist(context, EntityArgument.getEntity(context,"ent1"), EntityArgument.getEntity(context,"ent2"),DoubleArgumentType.getDouble(context,"scale")))
-                                                        )
+                                )
+                        ).then(literal("entities")
+                                .then(argument("ent1", EntityArgument.entity())
+                                        .then(argument("ent2", EntityArgument.entity())
+                                                .executes(context -> calcDist(context, EntityArgument.getEntity(context,"ent1"), EntityArgument.getEntity(context,"ent2")))
+                                                .then(argument("scale",DoubleArgumentType.doubleArg())
+                                                        .executes(context -> calcDist(context, EntityArgument.getEntity(context,"ent1"), EntityArgument.getEntity(context,"ent2"),DoubleArgumentType.getDouble(context,"scale")))
                                                 )
                                         )
                                 )
-
                         )
+
+                )
 
 
 
@@ -178,8 +185,13 @@ public class SetupCommands{
                 )
                 .then(literal("loader")
                         .executes(context -> {
-                            context.getSource().sendSuccess(() -> Component.literal("This subcommand exists for datapacks to detect which loader version of the mod is installed. This subcommand does nothing else other than return 1 on neoforge, and 0 on fabric."), false);
-                            return 0;
+                            context.getSource().sendSuccess(() -> Component.literal("This subcommand exists for datapacks to detect which loader version of the mod is installed. This subcommand does nothing else other than return 0 on Fabric, 1 on NeoForge, and 2 on Forge "), false);
+                            return switch (PLATFORM.getPlatformName()) {
+                                case "Fabric" -> 0;
+                                case "NeoForge" -> 1;
+                                case "Forge" -> 2;
+                                default -> 0;
+                            };
                         })
                 )
                 .then(literal("velocity")
@@ -192,7 +204,7 @@ public class SetupCommands{
                                                 Collection<? extends Entity> entities = EntityArgument.getEntities(context, "entities");
                                                 for (Entity entityIndex : entities) {
                                                     entityIndex.setDeltaMovement(velocity);
-                                                    
+
                                                     if (entityIndex instanceof ServerPlayer) {
                                                         ((ServerPlayer) entityIndex).connection.send(new ClientboundSetEntityMotionPacket(entityIndex));
                                                     }
@@ -211,9 +223,9 @@ public class SetupCommands{
                                                         Vec3 velocity = Vec3Argument.getVec3(context, "Vector");
                                                         Collection<? extends Entity> entities = EntityArgument.getEntities(context, "entities");
                                                         for (Entity entityIndex : entities) {
-                                                            
+
                                                             entityIndex.push(velocity);
-                                                            
+
                                                             entityIndex.needsSync = true;
                                                             if (entityIndex instanceof ServerPlayer) {
                                                                 ((ServerPlayer) entityIndex).connection.send(new ClientboundSetEntityMotionPacket(entityIndex));
@@ -236,7 +248,7 @@ public class SetupCommands{
                                                         Collection<? extends Entity> entities = EntityArgument.getEntities(context, "entities");
                                                         for (Entity entityIndex : entities) {
                                                             entityIndex.setDeltaMovement(velocity);
-                                                            
+
                                                             if (entityIndex instanceof ServerPlayer) {
                                                                 ((ServerPlayer) entityIndex).connection.send(new ClientboundSetEntityMotionPacket(entityIndex));
                                                             }
@@ -258,7 +270,7 @@ public class SetupCommands{
                                                         for (Entity entityIndex : entities) {
                                                             Vec3 originalVel = entityIndex.getDeltaMovement();
                                                             entityIndex.setDeltaMovement(originalVel.multiply(velocity));
-                                                            
+
                                                             entityIndex.needsSync = true;
                                                             if (entityIndex instanceof ServerPlayer) {
                                                                 ((ServerPlayer) entityIndex).connection.send(new ClientboundSetEntityMotionPacket(entityIndex));
@@ -273,6 +285,80 @@ public class SetupCommands{
                                                     }
                                                     return 1;
                                                 })
+                                        )
+                                        .then(literal("divide")
+                                                .executes(context -> {
+                                                    try {
+                                                        Vec3 velocity = Vec3Argument.getVec3(context, "Vector");
+                                                        Collection<? extends Entity> entities = EntityArgument.getEntities(context, "entities");
+                                                        for (Entity entityIndex : entities) {
+                                                            Vec3 originalVel = entityIndex.getDeltaMovement();
+                                                            entityIndex.setDeltaMovement(divideVector(originalVel,velocity));
+
+                                                            entityIndex.needsSync = true;
+                                                            if (entityIndex instanceof ServerPlayer) {
+                                                                ((ServerPlayer) entityIndex).connection.send(new ClientboundSetEntityMotionPacket(entityIndex));
+                                                            }
+
+                                                            // Don't feel like setting up an instance of LOGGER.
+                                                            // System.out.println("The new velocity is " + entityIndex.getVelocity().toString());
+                                                        }
+                                                    } catch (Throwable e) {
+                                                        context.getSource().sendSuccess(() -> Component.literal("An error occurred: " + e), false);
+                                                        return -1;
+                                                    }
+                                                    return 1;
+                                                })
+                                        )
+                                        .then(literal("lerp")
+                                                .executes(context -> {
+                                                    try {
+                                                        double factor = DoubleArgumentType.getDouble(context, "factor");
+                                                        Vec3 velocity = Vec3Argument.getVec3(context, "Vector");
+                                                        Collection<? extends Entity> entities = EntityArgument.getEntities(context, "entities");
+                                                        for (Entity entityIndex : entities) {
+                                                            Vec3 originalVel = entityIndex.getDeltaMovement();
+                                                            entityIndex.setDeltaMovement(originalVel.lerp(velocity,factor));
+
+                                                            entityIndex.needsSync = true;
+                                                            if (entityIndex instanceof ServerPlayer) {
+                                                                ((ServerPlayer) entityIndex).connection.send(new ClientboundSetEntityMotionPacket(entityIndex));
+                                                            }
+
+                                                            // Don't feel like setting up an instance of LOGGER.
+                                                            // System.out.println("The new velocity is " + entityIndex.getVelocity().toString());
+                                                        }
+                                                    } catch (Throwable e) {
+                                                        context.getSource().sendSuccess(() -> Component.literal("An error occurred: " + e), false);
+                                                        return -1;
+                                                    }
+                                                    return 1;
+
+                                                })
+                                                .then(argument("factor",DoubleArgumentType.doubleArg())
+                                                .executes(context -> {
+                                                    try {
+                                                        double factor = DoubleArgumentType.getDouble(context, "factor");
+                                                        Vec3 velocity = Vec3Argument.getVec3(context, "Vector");
+                                                        Collection<? extends Entity> entities = EntityArgument.getEntities(context, "entities");
+                                                        for (Entity entityIndex : entities) {
+                                                            Vec3 originalVel = entityIndex.getDeltaMovement();
+                                                            entityIndex.setDeltaMovement(originalVel.lerp(velocity,factor));
+
+                                                            entityIndex.needsSync = true;
+                                                            if (entityIndex instanceof ServerPlayer) {
+                                                                ((ServerPlayer) entityIndex).connection.send(new ClientboundSetEntityMotionPacket(entityIndex));
+                                                            }
+
+                                                            // Don't feel like setting up an instance of LOGGER.
+                                                            // System.out.println("The new velocity is " + entityIndex.getVelocity().toString());
+                                                        }
+                                                    } catch (Throwable e) {
+                                                        context.getSource().sendSuccess(() -> Component.literal("An error occurred: " + e), false);
+                                                        return -1;
+                                                    }
+                                                    return 1;
+                                                }))
                                         )
 
                                 )
@@ -322,15 +408,15 @@ public class SetupCommands{
                                 )
                         )
                 )
-                        .then(literal("check_damage")
-                                .requires(source -> Commands.hasPermission(LEVEL_GAMEMASTERS).test(source))
-                                .then(argument("target", EntityArgument.entity())
-                                        .executes(context -> checkDamage(context.getSource(), EntityArgument.getEntity(context, "target"), null))
-                                        .then(argument("damage_predicate", StringArgumentType.string())
-                                                .executes(context -> checkDamage(context.getSource(), EntityArgument.getEntity(context, "target"), StringArgumentType.getString(context, "damage_predicate")))
-                                        )
+                .then(literal("check_damage")
+                        .requires(source -> Commands.hasPermission(LEVEL_GAMEMASTERS).test(source))
+                        .then(argument("target", EntityArgument.entity())
+                                .executes(context -> checkDamage(context.getSource(), EntityArgument.getEntity(context, "target"), null))
+                                .then(argument("damage_predicate", StringArgumentType.string())
+                                        .executes(context -> checkDamage(context.getSource(), EntityArgument.getEntity(context, "target"), StringArgumentType.getString(context, "damage_predicate")))
                                 )
                         )
+                )
                 .then(literal("pathfind")
                         .requires(source -> Commands.hasPermission(LEVEL_GAMEMASTERS).test(source))
 
@@ -414,6 +500,7 @@ public class SetupCommands{
                                         .executes(context -> {
                                             Entity entity = EntityArgument.getEntity(context,"entity");
                                             String check = StringArgumentType.getString(context, "check");
+
                                             boolean success;
                                             switch (check) {
                                                 case "living" -> success = entity instanceof LivingEntity;
@@ -454,12 +541,321 @@ public class SetupCommands{
                                 )
                         )
                 )
-                .then(literal("manipulate"))
-                // Register a server tick event to reset the damage flags
+                .then(literal("manipulate")
+                        .requires(source -> Commands.hasPermission(LEVEL_GAMEMASTERS).test(source))
+                        .then(argument("entity",EntityArgument.entity())
+                                .then(literal("generic")
+                                        .then(literal("extinguish").executes(context -> {
+                                            Entity entity = EntityArgument.getEntity(context,"entity");
+                                            entity.extinguishFire();
+                                            context.getSource().sendSuccess(() -> Component.literal("Extinguished the entity."),true);
+                                            return 1;
+                                        }))
+                                        .then(literal("eject_passengers").executes(context -> {
+                                            Entity entity = EntityArgument.getEntity(context,"entity");
+                                            entity.ejectPassengers();
+                                            context.getSource().sendSuccess(() -> Component.literal("Ejected all passengers."),true);
+                                            return 1;
+                                        }))
+                                )
+                                .then(literal("living_entity")
+                                        .then(literal("health").then(argument("value", FloatArgumentType.floatArg())
+                                                .executes(context -> {
+                                                    Entity entity = EntityArgument.getEntity(context, "entity");
+                                                    if (entity instanceof LivingEntity livingEntity) {
+                                                        float original = livingEntity.getHealth();
+                                                        livingEntity.setHealth(FloatArgumentType.getFloat(context,"value"));
+                                                        context.getSource().sendSuccess(() -> Component.literal("Set the health of %s to %f (from %f)".formatted(livingEntity.getScoreboardName(),livingEntity.getHealth(),original)),true);
+                                                        return (int) livingEntity.getHealth();
+                                                    } else {
+                                                        context.getSource().sendFailure(EntitySelector.joinNames(List.of(entity)).copy().append(Component.literal(" is not a living entity.")));
+                                                        return 0;
+                                                    }
+                                                })
+                                                .then(literal("add")
+                                                        .executes(context -> {
+                                                            Entity entity = EntityArgument.getEntity(context, "entity");
 
+                                                            if (entity instanceof LivingEntity livingEntity) {
+                                                                float original = livingEntity.getHealth();
+                                                                livingEntity.setHealth(livingEntity.getHealth() + FloatArgumentType.getFloat(context,"value"));
+                                                                context.getSource().sendSuccess(() -> Component.literal("Set the health of %s to %f (from %f)".formatted(livingEntity.getScoreboardName(),livingEntity.getHealth(),original)),true);
+                                                                return (int) livingEntity.getHealth();
+                                                            } else {
+                                                                context.getSource().sendFailure(EntitySelector.joinNames(List.of(entity)).copy().append(Component.literal(" is not a living entity.")));
+                                                                return 0;
+                                                            }
+                                                        })
+                                                )
+                                                .then(literal("remove")
+                                                        .executes(context -> {
+                                                            Entity entity = EntityArgument.getEntity(context, "entity");
+                                                            if (entity instanceof LivingEntity livingEntity) {
+                                                                float original = livingEntity.getHealth();
+                                                                livingEntity.setHealth(livingEntity.getHealth() - FloatArgumentType.getFloat(context,"value"));
+                                                                context.getSource().sendSuccess(() -> Component.literal("Set the health of %s to %f (from %f)".formatted(livingEntity.getScoreboardName(),livingEntity.getHealth(),original)),true);
+                                                                return (int) livingEntity.getHealth();
+                                                            } else {
+                                                                context.getSource().sendFailure(EntitySelector.joinNames(List.of(entity)).copy().append(Component.literal(" is not a living entity.")));
+                                                                return 0;
+                                                            }
+                                                        })
+                                                )
+                                                .then(literal("multiply")
+                                                        .executes(context -> {
+                                                            Entity entity = EntityArgument.getEntity(context, "entity");
+                                                            if (entity instanceof LivingEntity livingEntity) {
+                                                                float original = livingEntity.getHealth();
+                                                                livingEntity.setHealth(livingEntity.getHealth() * FloatArgumentType.getFloat(context,"value"));
+                                                                context.getSource().sendSuccess(() -> Component.literal("Set the health of %s to %f (from %f)".formatted(livingEntity.getScoreboardName(),livingEntity.getHealth(),original)),true);
+                                                                return (int) livingEntity.getHealth();
+                                                            } else {
+                                                                context.getSource().sendFailure(EntitySelector.joinNames(List.of(entity)).copy().append(Component.literal(" is not a living entity.")));
+                                                                return 0;
+                                                            }
+                                                        })
+                                                )
+                                                .then(literal("divide")
+                                                        .executes(context -> {
+                                                            Entity entity = EntityArgument.getEntity(context, "entity");
+                                                            if (entity instanceof LivingEntity livingEntity) {
+                                                                float original = livingEntity.getHealth();
+                                                                livingEntity.setHealth(livingEntity.getHealth() / FloatArgumentType.getFloat(context,"value"));
+                                                                context.getSource().sendSuccess(() -> Component.literal("Set the health of %s to %f (from %f)".formatted(livingEntity.getScoreboardName(),livingEntity.getHealth(),original)),true);
+                                                                return (int) livingEntity.getHealth();
+                                                            } else {
+                                                                context.getSource().sendFailure(EntitySelector.joinNames(List.of(entity)).copy().append(Component.literal(" is not a living entity.")));
+                                                                return 0;
+                                                            }
+                                                        })
+                                                ))
 
+                                        )
+                                                .then(literal("heal").then(argument("amount",FloatArgumentType.floatArg()).executes(context -> {
+                                                    Entity entity = EntityArgument.getEntity(context, "entity");
 
-        );
+                                                    if (entity instanceof LivingEntity livingEntity) {
+                                                        float original = livingEntity.getHealth();
+                                                        livingEntity.heal(FloatArgumentType.getFloat(context,"amount"));
+                                                        context.getSource().sendSuccess(() -> Component.literal("Set the health of %s to %f (from %f)".formatted(livingEntity.getScoreboardName(),livingEntity.getHealth(),original)),true);
+                                                        return (int) livingEntity.getHealth();
+                                                    } else {
+                                                        context.getSource().sendFailure(EntitySelector.joinNames(List.of(entity)).copy().append(Component.literal(" is not a living entity.")));
+                                                        return 0;
+                                                    }
+
+                                                })))
+                                        )
+
+                                .then(literal("player")
+                                        .then(literal("food_level").then(argument("value", IntegerArgumentType.integer())
+                                                        .executes(context -> {
+                                                            Entity entity = EntityArgument.getEntity(context, "entity");
+                                                            if (entity instanceof ServerPlayer serverPlayer) {
+                                                                FoodData foodData = serverPlayer.getFoodData();
+                                                                float original = foodData.getFoodLevel();
+                                                                foodData.setFoodLevel(IntegerArgumentType.getInteger(context,"value"));
+                                                                context.getSource().sendSuccess(() -> Component.literal("Set the foodLevel of %s to %d (from %f)".formatted(serverPlayer.getScoreboardName(),foodData.getFoodLevel(),original)),true);
+                                                                return foodData.getFoodLevel();
+                                                            } else {
+                                                                context.getSource().sendFailure(EntitySelector.joinNames(List.of(entity)).copy().append(Component.literal(" is not a living entity.")));
+                                                                return 0;
+                                                            }
+                                                        })
+                                                .then(literal("add")
+                                                        .executes(context -> {
+                                                            Entity entity = EntityArgument.getEntity(context, "entity");
+                                                            if (entity instanceof ServerPlayer serverPlayer) {
+                                                                FoodData foodData = serverPlayer.getFoodData();
+                                                                float original = foodData.getFoodLevel();
+                                                                foodData.setFoodLevel(foodData.getFoodLevel() + IntegerArgumentType.getInteger(context,"value"));
+                                                                context.getSource().sendSuccess(() -> Component.literal("Set the foodLevel of %s to %d (from %f)".formatted(serverPlayer.getScoreboardName(),foodData.getFoodLevel(),original)),true);
+                                                                return foodData.getFoodLevel();
+                                                            } else {
+                                                                context.getSource().sendFailure(EntitySelector.joinNames(List.of(entity)).copy().append(Component.literal(" is not a living entity.")));
+                                                                return 0;
+                                                            }
+                                                        })
+                                                )
+                                                .then(literal("remove")
+                                                        .executes(context -> {
+                                                            Entity entity = EntityArgument.getEntity(context, "entity");
+                                                            if (entity instanceof ServerPlayer serverPlayer) {
+                                                                FoodData foodData = serverPlayer.getFoodData();
+                                                                float original = foodData.getFoodLevel();
+                                                                foodData.setFoodLevel(foodData.getFoodLevel() - IntegerArgumentType.getInteger(context,"value"));
+                                                                context.getSource().sendSuccess(() -> Component.literal("Set the foodLevel of %s to %d (from %f)".formatted(serverPlayer.getScoreboardName(),foodData.getFoodLevel(),original)),true);
+                                                                return foodData.getFoodLevel();
+                                                            } else {
+                                                                context.getSource().sendFailure(EntitySelector.joinNames(List.of(entity)).copy().append(Component.literal(" is not a living entity.")));
+                                                                return 0;
+                                                            }
+                                                        })
+                                                )
+                                                .then(literal("multiply")
+                                                        .executes(context -> {
+                                                            Entity entity = EntityArgument.getEntity(context, "entity");
+                                                            if (entity instanceof ServerPlayer serverPlayer) {
+                                                                FoodData foodData = serverPlayer.getFoodData();
+                                                                float original = foodData.getFoodLevel();
+                                                                foodData.setFoodLevel(foodData.getFoodLevel() * IntegerArgumentType.getInteger(context,"value"));
+                                                                context.getSource().sendSuccess(() -> Component.literal("Set the foodLevel of %s to %d (from %f)".formatted(serverPlayer.getScoreboardName(),foodData.getFoodLevel(),original)),true);
+                                                                return foodData.getFoodLevel();
+                                                            } else {
+                                                                context.getSource().sendFailure(EntitySelector.joinNames(List.of(entity)).copy().append(Component.literal(" is not a living entity.")));
+                                                                return 0;
+                                                            }
+                                                        })
+                                                )
+                                                .then(literal("divide")
+                                                        .executes(context -> {
+                                                            Entity entity = EntityArgument.getEntity(context, "entity");
+                                                            if (entity instanceof ServerPlayer serverPlayer) {
+                                                                FoodData foodData = serverPlayer.getFoodData();
+                                                                float original = foodData.getFoodLevel();
+                                                                foodData.setFoodLevel(foodData.getFoodLevel() / IntegerArgumentType.getInteger(context,"value"));
+                                                                context.getSource().sendSuccess(() -> Component.literal("Set the foodLevel of %s to %d (from %f)".formatted(serverPlayer.getScoreboardName(),foodData.getFoodLevel(),original)),true);
+                                                                return foodData.getFoodLevel();
+                                                            } else {
+                                                                context.getSource().sendFailure(EntitySelector.joinNames(List.of(entity)).copy().append(Component.literal(" is not a living entity.")));
+                                                                return 0;
+                                                            }
+                                                        })
+                                                )
+                                                )
+                                        )
+                                        .then(literal("food_saturation_level").then(argument("value", FloatArgumentType.floatArg())
+                                                        .executes(context -> {
+                                                            Entity entity = EntityArgument.getEntity(context, "entity");
+                                                            if (entity instanceof ServerPlayer serverPlayer) {
+
+                                                                FoodData foodData = serverPlayer.getFoodData();
+
+                                                                float original = foodData.getSaturationLevel();
+                                                                foodData.setSaturation(FloatArgumentType.getFloat(context,"value"));
+                                                                context.getSource().sendSuccess(() -> Component.literal("Set the foodLevel of %s to %f (from %f)".formatted(serverPlayer.getScoreboardName(),foodData.getSaturationLevel(),original)),true);
+                                                                return (int) foodData.getSaturationLevel();
+                                                            } else {
+                                                                context.getSource().sendFailure(EntitySelector.joinNames(List.of(entity)).copy().append(Component.literal(" is not a living entity.")));
+                                                                return 0;
+                                                            }
+                                                        })
+                                                .then(literal("add")
+                                                        .executes(context -> {
+                                                            Entity entity = EntityArgument.getEntity(context, "entity");
+                                                            if (entity instanceof ServerPlayer serverPlayer) {
+                                                                FoodData foodData = serverPlayer.getFoodData();
+                                                                float original = foodData.getSaturationLevel();
+                                                                foodData.setSaturation(foodData.getSaturationLevel() + FloatArgumentType.getFloat(context,"value"));
+                                                                context.getSource().sendSuccess(() -> Component.literal("Set the foodLevel of %s to %f (from %f)".formatted(serverPlayer.getScoreboardName(),foodData.getSaturationLevel(),original)),true);
+                                                                return (int) foodData.getSaturationLevel();
+                                                            } else {
+                                                                context.getSource().sendFailure(EntitySelector.joinNames(List.of(entity)).copy().append(Component.literal(" is not a living entity.")));
+                                                                return 0;
+                                                            }
+                                                        })
+                                                )
+                                                .then(literal("remove")
+                                                        .executes(context -> {
+                                                            Entity entity = EntityArgument.getEntity(context, "entity");
+                                                            if (entity instanceof ServerPlayer serverPlayer) {
+                                                                FoodData foodData = serverPlayer.getFoodData();
+                                                                float original = foodData.getSaturationLevel();
+                                                                foodData.setSaturation(foodData.getSaturationLevel() - FloatArgumentType.getFloat(context,"value"));
+                                                                context.getSource().sendSuccess(() -> Component.literal("Set the foodLevel of %s to %f (from %f)".formatted(serverPlayer.getScoreboardName(),foodData.getSaturationLevel(),original)),true);
+                                                                return (int) foodData.getSaturationLevel();
+                                                            } else {
+                                                                context.getSource().sendFailure(EntitySelector.joinNames(List.of(entity)).copy().append(Component.literal(" is not a player.")));
+                                                                return 0;
+                                                            }
+                                                        })
+                                                )
+                                                .then(literal("multiply")
+                                                        .executes(context -> {
+                                                            Entity entity = EntityArgument.getEntity(context, "entity");
+                                                            if (entity instanceof ServerPlayer serverPlayer) {
+                                                                FoodData foodData = serverPlayer.getFoodData();
+                                                                float original = foodData.getSaturationLevel();
+                                                                foodData.setSaturation(foodData.getSaturationLevel() * FloatArgumentType.getFloat(context,"value"));
+                                                                context.getSource().sendSuccess(() -> Component.literal("Set the foodLevel of %s to %f (from %f)".formatted(serverPlayer.getScoreboardName(),foodData.getSaturationLevel(),original)),true);
+                                                                return (int) foodData.getSaturationLevel();
+                                                            } else {
+                                                                context.getSource().sendFailure(EntitySelector.joinNames(List.of(entity)).copy().append(Component.literal(" is not a player.")));
+                                                                return 0;
+                                                            }
+                                                        })
+                                                )
+                                                .then(literal("divide")
+                                                        .executes(context -> {
+                                                            Entity entity = EntityArgument.getEntity(context, "entity");
+                                                            if (entity instanceof ServerPlayer serverPlayer) {
+                                                                FoodData foodData = serverPlayer.getFoodData();
+                                                                float original = foodData.getSaturationLevel();
+                                                                foodData.setSaturation(foodData.getSaturationLevel() / FloatArgumentType.getFloat(context,"value"));
+                                                                context.getSource().sendSuccess(() -> Component.literal("Set the foodLevel of %s to %f (from %f)".formatted(serverPlayer.getScoreboardName(),foodData.getSaturationLevel(),original)),true);
+                                                                return (int) foodData.getSaturationLevel();
+                                                            } else {
+                                                                context.getSource().sendFailure(EntitySelector.joinNames(List.of(entity)).copy().append(Component.literal(" is not a player.")));
+                                                                return 0;
+                                                            }
+                                                        })
+                                                )
+
+                                        )
+                                        .then(literal("add_exhaustion").then(argument("value", FloatArgumentType.floatArg())
+                                                .executes(context -> {
+                                                    Entity entity = EntityArgument.getEntity(context, "entity");
+                                                    if (entity instanceof ServerPlayer serverPlayer) {
+
+                                                        FoodData foodData = serverPlayer.getFoodData();
+
+                                                        float original = ((PlayerExhaustionAccessor)foodData).getExhaustionLevel();
+                                                        foodData.addExhaustion(FloatArgumentType.getFloat(context,"value"));
+                                                        context.getSource().sendSuccess(() -> Component.literal("Added %f exhaustion to %s (previously %f)".formatted(foodData.getSaturationLevel(),serverPlayer.getScoreboardName(),original)),true);
+                                                        return (int) ((PlayerExhaustionAccessor)foodData).getExhaustionLevel();
+                                                    } else {
+                                                        context.getSource().sendFailure(EntitySelector.joinNames(List.of(entity)).copy().append(Component.literal(" is not a player.")));
+                                                        return 0;
+                                                    }
+                                                }))
+                                        )
+                                        )
+                                )
+                                .then(literal("ender_dragon")
+                                        .then(literal("fly_speed").then(argument("value", DoubleArgumentType.doubleArg())
+                                                .executes(context -> {
+                                                        Entity entity = EntityArgument.getEntity(context, "entity");
+                                                        if (entity instanceof EnderDragon enderDragon && entity instanceof EnderDragonSpeedAccessor accessor) {
+                                                            accessor.setFlySpeed(DoubleArgumentType.getDouble(context,"value"));
+                                                            context.getSource().sendSuccess(() -> Component.literal("Set the fly speed of %s to %f".formatted(enderDragon.getScoreboardName(),accessor.getFlySpeed())),true);
+                                                            return 1;
+                                                        } else {
+                                                            context.getSource().sendFailure(Component.literal("The provided entity is not an ender dragon or a mixin failed its loading."));
+                                                            return 0;
+                                                        }
+                                        })
+                                ))
+                                .then(literal("vertical_speed").then(argument("value", DoubleArgumentType.doubleArg())
+                                        .executes(context -> {
+                                            Entity entity = EntityArgument.getEntity(context, "entity");
+                                            if (entity instanceof EnderDragon enderDragon && entity instanceof EnderDragonSpeedAccessor accessor) {
+                                                accessor.setVerticalFlySpeed(DoubleArgumentType.getDouble(context,"value"));
+                                                context.getSource().sendSuccess(() -> Component.literal("Set the vertical fly speed of %s to %f".formatted(enderDragon.getScoreboardName(),accessor.getVerticalFlySpeed())),true);
+                                                return 1;
+                                            } else {
+                                                context.getSource().sendFailure(Component.literal("The provided entity is not an ender dragon or a mixin failed its loading."));
+                                                return 0;
+                                            }
+
+                                        })
+
+                                ))
+                        ))
+                );
+        return dispatcher.register(main);
+    }
+    public static Vec3 divideVector(Vec3 v1, Vec3 v2) {
+        return new Vec3(v1.x / v2.x, v1.y / v2.y, v1.z / v2.z);
     }
     public static void resetDamageFlags(MinecraftServer server) {
         for (net.minecraft.server.level.ServerLevel world : server.getAllLevels()) {

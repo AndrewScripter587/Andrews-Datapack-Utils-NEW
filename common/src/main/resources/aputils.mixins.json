@@ -1,17 +1,19 @@
 {
-  "required": true,
+  "required": false,
   "minVersion": "0.8",
   "package": "com.andrewgaming.aputils.mixin",
   "refmap": "${mod_id}.refmap.json",
   "compatibilityLevel": "JAVA_18",
   "mixins": [
     "AllowPlayerDataEditing",
-    "EntityDamageMixin"
+    "EnderDragonSpeedMixin",
+    "EntityDamageMixin",
+    "ExposeHungerValuesMixin"
   ],
   "client": [],
   "server": [],
   "injectors": {
-    "defaultRequire": 1
+    "defaultRequire": 0
   }
 }
 

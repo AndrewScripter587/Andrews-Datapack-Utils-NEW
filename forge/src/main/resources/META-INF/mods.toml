@@ -21,7 +21,7 @@ ordering = "NONE" # The order that this dependency should load in relation to yo
 side = "BOTH" # Side this dependency is applied on - 'BOTH', 'CLIENT' or 'SERVER'
 [[dependencies.${mod_id}]]
 modId = "minecraft"
-mandatory = true
+mandatory = false
 versionRange = "${minecraft_version_range}"
 ordering = "NONE"
 side = "BOTH"
