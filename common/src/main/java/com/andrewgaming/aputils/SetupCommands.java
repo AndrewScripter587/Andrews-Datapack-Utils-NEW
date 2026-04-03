@@ -154,7 +154,7 @@ public class SetupCommands{
                                 )
                         )
                         .then(literal("distance")
-                                .requires(serverCommandSource -> Commands.hasPermission(LEVEL_GAMEMASTERS).test(serverCommandSource)))
+                                .requires(serverCommandSource -> Commands.hasPermission(LEVEL_GAMEMASTERS).test(serverCommandSource))
                         .then(argument("pos1", Vec3Argument.vec3(true))
                                 .then(argument("pos2", Vec3Argument.vec3(true))
                                         .executes(context -> calcDist(context, Vec3Argument.getVec3(context, "pos1"), Vec3Argument.getVec3(context, "pos2")))
@@ -171,7 +171,7 @@ public class SetupCommands{
                                                 )
                                         )
                                 )
-                        )
+                        ))
 
                 )
 
