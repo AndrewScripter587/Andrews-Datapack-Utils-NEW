@@ -21,6 +21,7 @@ import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Mth;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageType;
 import net.minecraft.world.damagesource.DamageTypes;
@@ -171,7 +172,8 @@ public class SetupCommands{
                                                 )
                                         )
                                 )
-                        ))
+                        )
+                        )
 
                 )
 
@@ -359,6 +361,31 @@ public class SetupCommands{
                                                     }
                                                     return 1;
                                                 }))
+                                                .then(argument("factor_vec",Vec3Argument.vec3(false))
+                                                        .executes(context -> {
+                                                            try {
+                                                                Vec3 factor = Vec3Argument.getVec3(context, "factor_vec");
+                                                                Vec3 velocity = Vec3Argument.getVec3(context, "Vector");
+                                                                Collection<? extends Entity> entities = EntityArgument.getEntities(context, "entities");
+                                                                for (Entity entityIndex : entities) {
+                                                                    Vec3 originalVel = entityIndex.getDeltaMovement();
+                                                                    entityIndex.setDeltaMovement(lerpVec3(originalVel,velocity,factor));
+
+                                                                    entityIndex.needsSync = true;
+                                                                    if (entityIndex instanceof ServerPlayer) {
+                                                                        ((ServerPlayer) entityIndex).connection.send(new ClientboundSetEntityMotionPacket(entityIndex));
+                                                                    }
+
+                                                                    // Don't feel like setting up an instance of LOGGER.
+                                                                    // System.out.println("The new velocity is " + entityIndex.getVelocity().toString());
+                                                                }
+                                                            } catch (Throwable e) {
+                                                                context.getSource().sendSuccess(() -> Component.literal("An error occurred: " + e), false);
+                                                                return -1;
+                                                            }
+                                                            return 1;
+                                                        }))
+
                                         )
 
                                 )
@@ -873,7 +900,7 @@ public class SetupCommands{
             mob.setTarget(null);
             if (entity instanceof Warden warden && warden.getEntityAngryAt().isPresent()) {
                 warden.clearAnger(warden.getEntityAngryAt().get());
-                
+
             }
 
         } else if (entity instanceof Mob mob && target instanceof LivingEntity) {
@@ -985,5 +1012,7 @@ public class SetupCommands{
         context.getSource().sendSuccess(() -> Component.literal("The distance between " + pos1.toString() + " and " + pos2.toString() + " is " + dist),true);
         return (int) dist;
     }
-
+    public static Vec3 lerpVec3(Vec3 first, Vec3 second, Vec3 factor) {
+        return new Vec3(Mth.lerp(first.x,second.x,factor.x),Mth.lerp(first.y,second.y,factor.y),Mth.lerp(first.z,second.z,factor.z));
+    }
 }
